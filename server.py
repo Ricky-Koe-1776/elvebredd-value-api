@@ -4,7 +4,8 @@ import threading
 import time
 import urllib.request
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from scraper import AGES, POTIONS, slugify
@@ -19,7 +20,10 @@ CACHE_TTL = int(os.environ.get("CACHE_TTL", "300"))
 app = FastAPI(
     title="Adopt Me Value API",
     version="1.0",
-    description="Free Adopt Me pet and item values sourced from elvebredd.com. Updated every 15 minutes.",
+    description=(
+        "Free Adopt Me pet and item values sourced from elvebredd.com. Updated every 15 minutes. "
+        "No key needed, CORS open.\n\nTry: `/api/value?name=shadow-dragon&age=mega&potion=fly_ride`"
+    ),
 )
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
 
@@ -30,7 +34,7 @@ _cache = {"snap": None, "at": 0}
 @app.middleware("http")
 async def cdn_cache(request, call_next):
     resp = await call_next(request)
-    if request.method == "GET" and resp.status_code == 200:
+    if request.method == "GET" and resp.status_code == 200 and request.url.path != "/":
         # let the vercel edge serve repeat requests instead of the function
         resp.headers["Cache-Control"] = "public, s-maxage=300, stale-while-revalidate=600"
     return resp
@@ -70,7 +74,10 @@ def find_item(name, item_type=None):
 
 
 @app.get("/")
-def root():
+def root(request: Request):
+    # people opening the base url in a browser land on the docs, scripts still get json
+    if "text/html" in request.headers.get("accept", ""):
+        return RedirectResponse("/docs")
     snap = snapshot()
     return {
         "name": "Adopt Me Value API",
