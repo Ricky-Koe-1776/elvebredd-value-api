@@ -1,25 +1,30 @@
-# Elvebredd Value API
+# Adopt Me Value API
 
-Pulls Adopt Me values from [elvebredd.com](https://elvebredd.com) and serves them as JSON.
+Free, open Adopt Me pet and item values sourced from [elvebredd.com](https://elvebredd.com). No key needed, CORS open.
 
-The calculator page embeds the full item list (every pet + all neon/mega and potion variants) in its Next.js payload, so one request gets everything. Cloudflare 403s plain curl/requests; `curl_cffi` with Chrome impersonation gets through. Results are cached in memory for 10 min (`ELVEBREDD_CACHE_TTL`).
-
-## Run
-
-```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn server:app --port 8040
-```
-
-Docs at http://127.0.0.1:8040/docs
+**Base URL:** https://elvebredd-value-api.vercel.app · **Docs:** https://elvebredd-value-api.vercel.app/docs
 
 ## Endpoints
 
 - `GET /api/pets` (`?q=dragon` to search)
 - `GET /api/pets/{name}` e.g. `/api/pets/shadow-dragon` (name, slug, or id)
-- `GET /api/items?type=toys&q=` (types: pets, pet wear, toys, stickers, vehicles, strollers, food, gifts, eggs, other)
-- `GET /api/items/{name}`
+- `GET /api/items?type=toys&q=` and `GET /api/items/{name}`
+- `GET /api/types`
 - `GET /api/value?name=shadow-dragon&age=mega&potion=fly_ride` (age: default|neon|mega, potion: nopotion|ride|fly|fly_ride)
-- `POST /api/refresh` force re-scrape
 
-Pet shape: `values.{default,neon,mega}.{base,nopotion,ride,fly,fly_ride}`. Non-pet items have a single `value`.
+Pets have `values.{default,neon,mega}.{base,nopotion,ride,fly,fly_ride}`; other items have a single `value`. Every list response includes `updated_at` (unix time).
+
+## How it works
+
+- `scraper.py` runs every 15 min in GitHub Actions (`.github/workflows/scrape.yml`), pulls the full item list embedded in elvebredd's calculator page (curl_cffi Chrome impersonation gets past Cloudflare), and commits `data/values.json` only when values change.
+- `server.py` (FastAPI on Vercel) only reads that JSON from GitHub raw, never elvebredd. Responses are edge-cached 5 min.
+
+## Local
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r requirements.txt -r requirements-scraper.txt uvicorn
+.venv/bin/python scraper.py          # refresh data/values.json
+.venv/bin/uvicorn server:app --port 8040
+```
+
+Deploy: `npx vercel --prod --yes` (not git-connected).
